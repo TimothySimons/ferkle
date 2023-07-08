@@ -9,8 +9,6 @@ license = "MIT OR Apache-2.0"
 keywords = ["merkle", "tree"]
 categories = ["filesystem"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 flate2 = "1.0.26"
 log = "0.4.19"
@@ -19,6 +17,6 @@ sha2 = "0.10.7"
 [dependencies.uuid]
 version = "1.4.0"
 features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "v4",
+    "fast-rng",
 ]
