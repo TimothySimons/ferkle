@@ -22,7 +22,10 @@ fn main() -> io::Result<()> {
     fs::create_dir_all(&object_path)?;
 
     let objstore = objectstore::ObjectStore::new(object_path);
-    objstore.write_blob(file_path, buffer_size.unwrap())?;
+
+    let hexdigest = objstore.write_blob(&file_path, buffer_size.unwrap())?;
+    print!("{hexdigest}");
+    objstore.read_blob(&hexdigest, &file_path.with_extension("decompressed"), buffer_size.unwrap())?;
     Ok(())
 }
 

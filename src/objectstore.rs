@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path;
 
 use flate2::write::DeflateEncoder;
+use flate2::read::DeflateDecoder;
 use flate2::Compression;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -21,7 +22,7 @@ impl ObjectStore {
         Self { location }
     }
 
-    pub(crate) fn write_blob(&self, file_path: path::PathBuf, buffer_size: usize) -> io::Result<String> {
+    pub(crate) fn write_blob(&self, file_path: &path::PathBuf, buffer_size: usize) -> io::Result<String> {
         let mut file = fs::File::open(file_path)?;
         let uuid_file_name = format!("{}", Uuid::new_v4());
         let uuid_file_path = self.location.join(&uuid_file_name);
@@ -59,6 +60,55 @@ impl ObjectStore {
 
         Ok(hexdigest)
     }
+
+
+    pub(crate) fn read_blob(&self, hexdigest: &str, file_path: &path::PathBuf, buffer_size: usize) -> io::Result<()> {
+        let (obj_dir_name, obj_file_name) = hexdigest.split_at(OBJ_DIR_LEN);
+        let obj_dir_path = self.location.join(obj_dir_name);
+        let obj_file_path = obj_dir_path.join(obj_file_name);
+
+        let file = fs::File::open(obj_file_path)?;
+        let mut decoder = DeflateDecoder::new(file);
+        let mut hasher = Sha256::new();
+
+        let mut buffer = vec![0; buffer_size];
+        let mut output_file = fs::File::create(file_path)?;
+
+        loop {
+            let bytes_read = decoder.read(&mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            let buffer_slice = &buffer[..bytes_read];
+            hasher.update(buffer_slice);
+            output_file.write_all(buffer_slice)?;
+        }
+
+        let digest = hasher.finalize();
+        let decoded_hexdigest = format!("{digest:x}");
+
+        if decoded_hexdigest != hexdigest {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Decompressed content does not match the provided hexdigest.",
+            ));
+        }
+
+        Ok(())
+    }
+
+    // TODO: create a method to generate a temporary file
+    // * we need errors for if file already exists
+    // * why not use std::env::temp_dir... it makes so much more sense
+
+    // TODO:
+    // * create a hash::Hasher module and a Codec::encoder & Codec::decoder module wrappers 
+    //   return HexDigest type, ensures size & format
+    //   (agnostic to underlying algorithms)
+    //   (benchmarking/testing *later* becomes much easier - when there are bench/test suites)
+    // * let hasher = Hash::new(); hasher.update(...); hasher.finish(); etc.
+    // * let encoder = Codec::new(); encoder.update(...); encoder.finish(); etc.
+    // * See wasmer/lib/cache/src/hash.rs
     
     // TODO:
     // 1. a first draft of write_blob
