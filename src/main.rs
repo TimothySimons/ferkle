@@ -9,6 +9,7 @@ use std::io;
 use std::path;
 
 mod objectstore;
+mod codec;
 
 fn main() -> io::Result<()> {
     let file_path_arg = std::env::args().nth(1).unwrap();

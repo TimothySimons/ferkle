@@ -4,11 +4,10 @@ use std::io::Read;
 use std::io::Write;
 use std::path;
 
-use flate2::write::DeflateEncoder;
-use flate2::read::DeflateDecoder;
-use flate2::Compression;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
+
+use crate::codec;
 
 const OBJ_DIR_LEN: usize = 2;
 
@@ -23,14 +22,14 @@ impl ObjectStore {
     }
 
     pub(crate) fn write_blob(&self, file_path: &path::PathBuf, buffer_size: usize) -> io::Result<String> {
-        let mut file = fs::File::open(file_path)?;
         let uuid_file_name = format!("{}", Uuid::new_v4());
         let uuid_file_path = self.location.join(&uuid_file_name);
         let temporary_file = fs::File::create(&uuid_file_path)?;
 
-        let mut encoder = DeflateEncoder::new(temporary_file, Compression::default());
+        let mut encoder = codec::Encoder::new(temporary_file);
         let mut hasher = Sha256::new();
 
+        let mut file = fs::File::open(file_path)?;
         let size = file.metadata()?.len();
         let header = format!("blob {size}\0");
         encoder.write_all(header.as_bytes())?;
@@ -68,7 +67,7 @@ impl ObjectStore {
         let obj_file_path = obj_dir_path.join(obj_file_name);
 
         let file = fs::File::open(obj_file_path)?;
-        let mut decoder = DeflateDecoder::new(file);
+        let mut decoder = codec::Decoder::new(file);
         let mut hasher = Sha256::new();
 
         let mut buffer = vec![0; buffer_size];
@@ -96,6 +95,9 @@ impl ObjectStore {
 
         Ok(())
     }
+
+    // TODO: read_blob could maybe be write_file, 
+    // anyway contention about this one, figure it out later...
 
     // TODO: create a method to generate a temporary file
     // * we need errors for if file already exists
