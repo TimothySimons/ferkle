@@ -10,6 +10,7 @@ use std::path;
 
 mod objectstore;
 mod codec;
+mod hash;
 
 fn main() -> io::Result<()> {
     let file_path_arg = std::env::args().nth(1).unwrap();
@@ -25,7 +26,6 @@ fn main() -> io::Result<()> {
     let objstore = objectstore::ObjectStore::new(object_path);
 
     let hexdigest = objstore.write_blob(&file_path, buffer_size.unwrap())?;
-    print!("{hexdigest}");
     objstore.read_blob(&hexdigest, &file_path.with_extension("decompressed"), buffer_size.unwrap())?;
     Ok(())
 }

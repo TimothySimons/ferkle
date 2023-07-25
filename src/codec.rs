@@ -4,16 +4,18 @@ use flate2::write::DeflateEncoder;
 use flate2::read::DeflateDecoder;
 use flate2::Compression;
 
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Encoder<W: Write> {
     inner: DeflateEncoder<W>,
 }
 
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Decoder<R: Read> {
     inner: DeflateDecoder<R>,
 }
 
 impl<R: Read> Decoder<R> {
-    pub(crate) fn new(r: R) -> Decoder<R> {
+    pub(crate) fn new(r: R) -> Self {
         let inner = DeflateDecoder::new(r);
         Self { inner }
     }
@@ -25,7 +27,7 @@ impl<R: Read> Decoder<R> {
 }
 
 impl<W: Write> Encoder<W> {
-    pub(crate) fn new(w: W) -> Encoder<W> {
+    pub(crate) fn new(w: W) -> Self {
         let inner = DeflateEncoder::new(w, Compression::default());
         Self { inner }
     }
