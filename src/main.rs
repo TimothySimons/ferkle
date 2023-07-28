@@ -13,33 +13,35 @@ mod codec;
 mod hash;
 
 fn main() -> io::Result<()> {
-    let file_path_arg = std::env::args().nth(1).unwrap();
-    let buffer_size_arg = std::env::args().nth(2).unwrap();
-
-    let file_path = path::PathBuf::from(file_path_arg);
-    let buffer_size = parse_size(&buffer_size_arg);
+    let path_arg = std::env::args().nth(1).unwrap();
+    let path = path::PathBuf::from(path_arg);
+    let buffer_size:usize  = 8192;
 
     let cwd = env::current_dir()?;
     let object_path = cwd.join("objects");
     fs::create_dir_all(&object_path)?;
-
     let objstore = objectstore::ObjectStore::new(object_path);
 
-    let hexdigest = objstore.write_blob(&file_path, buffer_size.unwrap())?;
-    objstore.read_blob(&hexdigest, &file_path.with_extension("decompressed"), buffer_size.unwrap())?;
+    let metadata = fs::metadata(&path).unwrap();
+    if metadata.is_dir() {
+        objstore.write_tree(&path, buffer_size).unwrap();
+    } else if metadata.is_file() {
+        let hexdigest = objstore.write_blob(&path, buffer_size)?;
+        // objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
+    }
     Ok(())
 }
 
 
-fn parse_size(size_str: &str) -> Option<usize> {
-    let value_str = size_str.trim_end();
-    let (value, unit) = value_str.split_at(value_str.len() - 2);
-
-    let parsed_value = value.parse::<usize>().ok()?;
-    match unit {
-        "KB" => Some(parsed_value * 1024),
-        "MB" => Some(parsed_value * 1024 * 1024),
-        "GB" => Some(parsed_value * 1024 * 1024 * 1024),
-        _ => None,
-    }
-}
+// fn parse_size(size_str: &str) -> Option<usize> {
+//     let value_str = size_str.trim_end();
+//     let (value, unit) = value_str.split_at(value_str.len() - 2);
+// 
+//     let parsed_value = value.parse::<usize>().ok()?;
+//     match unit {
+//         "KB" => Some(parsed_value * 1024),
+//         "MB" => Some(parsed_value * 1024 * 1024),
+//         "GB" => Some(parsed_value * 1024 * 1024 * 1024),
+//         _ => None,
+//     }
+// }

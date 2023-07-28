@@ -9,99 +9,166 @@ use crate::codec;
 use crate::hash;
 use crate::hash::HexDigest;
 
+
 const OBJ_DIR_LEN: usize = 2;
+
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct ObjectStore {
     location: path::PathBuf,
 }
 
-impl ObjectStore {
-    pub(crate) const fn new(location: path::PathBuf) -> Self {
-        Self { location }
+struct WriteObject {
+    temp_path: path::PathBuf,
+    encoder: codec::Encoder<fs::File>,
+    hasher: hash::Hasher,
+}
+
+struct ReadObject {
+    hexdigest: HexDigest,
+    decoder: codec::Decoder<fs::File>,
+    hasher: hash::Hasher,
+}
+
+
+impl WriteObject {
+
+    fn new() -> io::Result<Self> {
+        let temp_dir_path = env::temp_dir();
+        let uuid_file_name = Uuid::new_v4().to_string();
+        let temp_path = temp_dir_path.join(uuid_file_name);
+        let file = fs::File::create(&temp_path)?;
+        let encoder = codec::Encoder::new(file);
+        let hasher = hash::Hasher::new();
+        Ok( Self { temp_path, encoder, hasher })
     }
 
-    pub(crate) fn write_blob(&self, file_path: &path::PathBuf, buffer_size: usize) -> io::Result<hash::HexDigest> {
-        let (temp_file, temp_file_path) = create_temp_file()?;
-        let mut encoder = codec::Encoder::new(temp_file);
-        let mut hasher = hash::Hasher::new();
+    fn update(&mut self, buffer: &[u8]) -> io::Result<()> {
+        self.encoder.update(buffer)?;
+        self.hasher.update(buffer);
+        Ok(())
+    }
 
-        let mut file = fs::File::open(file_path)?;
-        let size = file.metadata()?.len();
-        let header = format!("blob {size}\0");
-        encoder.write_all(header.as_bytes())?;
-        hasher.update(header.as_bytes());
-
-        let mut buffer = vec![0; buffer_size];
-        loop {
-            let bytes_read = file.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            let buffer_slice = &buffer[..bytes_read];
-            encoder.write_all(buffer_slice)?;
-            hasher.update(buffer_slice);
-        }
-        encoder.finish()?;
-        let hexdigest = hasher.finish();
-
-        let obj_path = hexdigest.to_string();
-        let (obj_dir_name, obj_file_name) = obj_path.split_at(OBJ_DIR_LEN);
-        let obj_dir_path = self.location.join(obj_dir_name);
+    fn finish(self, location: &path::PathBuf) -> io::Result<HexDigest> {
+        self.encoder.finish()?;
+        let hexdigest = self.hasher.finish();
+        let obj_hexdigest = hexdigest.to_string();
+        let (obj_dir_name, obj_file_name) = obj_hexdigest.split_at(OBJ_DIR_LEN);
+        let obj_dir_path = location.join(obj_dir_name);
         if !obj_dir_path.exists() {
             fs::create_dir(&obj_dir_path)?;
         }
         let obj_file_path = obj_dir_path.join(obj_file_name);
-        fs::rename(temp_file_path, obj_file_path)?;
-
+        fs::rename(self.temp_path, obj_file_path)?;
         Ok(hexdigest)
     }
+}
 
 
-
-
-    pub(crate) fn read_blob(&self, hexdigest: &HexDigest, file_path: &path::PathBuf, buffer_size: usize) -> io::Result<()> {
+impl ReadObject {
+    fn new(location: &path::PathBuf, hexdigest: HexDigest) -> io::Result<Self> {
         let obj_path = hexdigest.to_string();
         let (obj_dir_name, obj_file_name) = obj_path.split_at(OBJ_DIR_LEN);
-        let obj_dir_path = self.location.join(obj_dir_name);
+        let obj_dir_path = location.join(obj_dir_name);
         let obj_file_path = obj_dir_path.join(obj_file_name);
 
         let file = fs::File::open(obj_file_path)?;
-        let mut decoder = codec::Decoder::new(file);
-        let mut hasher = hash::Hasher::new();
+        let decoder = codec::Decoder::new(file);
+        let hasher = hash::Hasher::new();
+        Ok( Self { hexdigest, decoder, hasher })
+    }
 
-        let mut buffer = vec![0; buffer_size];
-        let mut output_file = fs::File::create(file_path)?;
-
-        loop {
-            let bytes_read = decoder.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            let buffer_slice = &buffer[..bytes_read];
-            hasher.update(buffer_slice);
-            output_file.write_all(buffer_slice)?;
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let bytes_read = self.decoder.read(buffer)?;
+        if bytes_read != 0 {
+            let buf_slice = &buffer[..bytes_read];
+            self.hasher.update(buf_slice);
         }
+        return Ok(bytes_read)
+    }
 
-        let decoded_hexdigest = hasher.finish();
-        if decoded_hexdigest != *hexdigest {
+    fn finish(self) -> io::Result<()> {
+        let hexdigest = self.hasher.finish();
+        if hexdigest != self.hexdigest {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Decompressed content does not match the provided hexdigest.",
             ));
         }
-
         Ok(())
     }
 }
 
-fn create_temp_file() -> io::Result<(fs::File, std::path::PathBuf)>{
-    let temp_dir = env::temp_dir();
-    let uuid_file_name = format!("{}", Uuid::new_v4());
-    let uuid_file_path = temp_dir.join(uuid_file_name);
-    let temp_file = fs::File::create(&uuid_file_path)?;
-    Ok((temp_file, uuid_file_path))
+
+impl ObjectStore {
+
+
+    pub(crate) const fn new(location: path::PathBuf) -> Self {
+        Self { location }
+    }
+
+
+    pub(crate) fn write_tree(&self, dir_path: &path::PathBuf, buf_size: usize) -> io::Result<hash::HexDigest> {
+        let mut object = WriteObject::new()?;
+        let items = fs::read_dir(dir_path)?;
+
+        for item in items {
+            let item = item?;
+            let entry = if item.file_type()?.is_file() {
+                let hexdigest = self.write_blob(&item.path(), buf_size)?;
+                format!("blob {}\t{}", hexdigest.to_string(), item.file_name().to_string_lossy())
+            } else if item.file_type()?.is_dir() {
+                let hexdigest = self.write_tree(&item.path(), buf_size)?;
+                format!("tree {}\t{}", hexdigest.to_string(), item.file_name().to_string_lossy())
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Unknown object type encountered.",
+                ));
+            }; 
+            object.update(entry.as_bytes())?;
+        }
+        object.finish(&self.location)
+    }
+
+
+    pub(crate) fn write_blob(&self, file_path: &path::PathBuf, buf_size: usize) -> io::Result<hash::HexDigest> {
+        let mut object = WriteObject::new()?;
+        let mut file = fs::File::open(file_path)?;
+        let mut buf = vec![0; buf_size];
+
+        loop {
+            let bytes_read = file.read(&mut buf)?;
+            if bytes_read == 0 {
+                break;
+            }
+            let buf_slice = &buf[..bytes_read];
+            object.update(buf_slice)?;
+        }
+
+        object.finish(&self.location)
+    }
+
+
+    pub(crate) fn read_blob(&self, hexdigest: HexDigest, file_path: &path::PathBuf, buf_size: usize) -> io::Result<()> {
+        let mut object = ReadObject::new(&self.location, hexdigest)?;
+        let mut file = fs::File::create(file_path)?;
+        let mut buf = vec![0; buf_size];
+        loop {
+            let bytes_read = object.read(&mut buf)?;
+            if bytes_read == 0 {
+                break;
+            }
+            let buf_slice = &buf[..bytes_read];
+            file.write_all(buf_slice)?;
+        }
+        object.finish()
+    }
 }
+
+
+
+// TODO: think deeply about string_lossy
 
 // TODO: read_blob could maybe be write_file, 
 // anyway contention about this one, figure it out later...
@@ -136,3 +203,8 @@ fn create_temp_file() -> io::Result<(fs::File, std::path::PathBuf)>{
 // TODO: 
 // * ?s are like todos themselves, need to revisit them and ensure best practice error-handling
 //   and propogation
+
+// TODO: 
+// * consider making BUFFER_SIZE a constant after some benchmarking...
+
+// TODO: We need to find a smarter way of handling OsStrings...

@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 
+
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Hasher {
     inner: Sha256

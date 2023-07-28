@@ -32,7 +32,7 @@ impl<W: Write> Encoder<W> {
         Self { inner }
     }
 
-    pub(crate) fn write_all(&mut self, buffer: &[u8]) -> io::Result<()> {
+    pub(crate) fn update(&mut self, buffer: &[u8]) -> io::Result<()> {
         self.inner.write_all(buffer)?;
         Ok(())
     }
