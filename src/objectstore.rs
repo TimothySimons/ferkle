@@ -9,29 +9,26 @@ use crate::codec;
 use crate::hash;
 use crate::hash::HexDigest;
 
-
 const OBJ_DIR_LEN: usize = 2;
 
+struct ObjectWriter {
+    temp_path: path::PathBuf,
+    encoder: codec::Encoder<fs::File>,
+    hasher: hash::Hasher,
+}
+
+struct ObjectReader {
+    hexdigest: HexDigest,
+    decoder: codec::Decoder<fs::File>,
+    hasher: hash::Hasher,
+}
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct ObjectStore {
     location: path::PathBuf,
 }
 
-struct WriteObject {
-    temp_path: path::PathBuf,
-    encoder: codec::Encoder<fs::File>,
-    hasher: hash::Hasher,
-}
-
-struct ReadObject {
-    hexdigest: HexDigest,
-    decoder: codec::Decoder<fs::File>,
-    hasher: hash::Hasher,
-}
-
-
-impl WriteObject {
+impl ObjectWriter {
 
     fn new() -> io::Result<Self> {
         let temp_dir_path = env::temp_dir();
@@ -43,9 +40,9 @@ impl WriteObject {
         Ok( Self { temp_path, encoder, hasher })
     }
 
-    fn update(&mut self, buffer: &[u8]) -> io::Result<()> {
-        self.encoder.update(buffer)?;
-        self.hasher.update(buffer);
+    fn write_all(&mut self, buffer: &[u8]) -> io::Result<()> {
+        self.encoder.write_all(buffer)?;
+        self.hasher.write_all(buffer);
         Ok(())
     }
 
@@ -65,7 +62,8 @@ impl WriteObject {
 }
 
 
-impl ReadObject {
+impl ObjectReader {
+    
     fn new(location: &path::PathBuf, hexdigest: HexDigest) -> io::Result<Self> {
         let obj_path = hexdigest.to_string();
         let (obj_dir_name, obj_file_name) = obj_path.split_at(OBJ_DIR_LEN);
@@ -82,7 +80,7 @@ impl ReadObject {
         let bytes_read = self.decoder.read(buffer)?;
         if bytes_read != 0 {
             let buf_slice = &buffer[..bytes_read];
-            self.hasher.update(buf_slice);
+            self.hasher.write_all(buf_slice);
         }
         return Ok(bytes_read)
     }
@@ -102,56 +100,62 @@ impl ReadObject {
 
 impl ObjectStore {
 
-
     pub(crate) const fn new(location: path::PathBuf) -> Self {
         Self { location }
     }
 
-
     pub(crate) fn write_tree(&self, dir_path: &path::PathBuf, buf_size: usize) -> io::Result<hash::HexDigest> {
-        let mut object = WriteObject::new()?;
+        let mut object = ObjectWriter::new()?;
         let items = fs::read_dir(dir_path)?;
 
         for item in items {
             let item = item?;
             let entry = if item.file_type()?.is_file() {
                 let hexdigest = self.write_blob(&item.path(), buf_size)?;
-                format!("blob {}\t{}", hexdigest.to_string(), item.file_name().to_string_lossy())
+                format!("blob {}\t{}\n", hexdigest.to_string(), item.file_name().to_string_lossy())
             } else if item.file_type()?.is_dir() {
                 let hexdigest = self.write_tree(&item.path(), buf_size)?;
-                format!("tree {}\t{}", hexdigest.to_string(), item.file_name().to_string_lossy())
+                format!("tree {}\t{}\n", hexdigest.to_string(), item.file_name().to_string_lossy())
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Unknown object type encountered.",
                 ));
             }; 
-            object.update(entry.as_bytes())?;
+            object.write_all(entry.as_bytes())?;
         }
         object.finish(&self.location)
     }
 
-
     pub(crate) fn write_blob(&self, file_path: &path::PathBuf, buf_size: usize) -> io::Result<hash::HexDigest> {
-        let mut object = WriteObject::new()?;
+        let mut object = ObjectWriter::new()?;
         let mut file = fs::File::open(file_path)?;
         let mut buf = vec![0; buf_size];
-
         loop {
             let bytes_read = file.read(&mut buf)?;
             if bytes_read == 0 {
                 break;
             }
             let buf_slice = &buf[..bytes_read];
-            object.update(buf_slice)?;
+            object.write_all(buf_slice)?;
         }
+        object.finish(&self.location)
+    }
 
+
+    pub(crate) fn write_blob_all(&self, file_path: &path::PathBuf) -> io::Result<hash::HexDigest> {
+        let mut object = ObjectWriter::new()?;
+        let mut file = fs::File::open(file_path)?;
+        let mut buf = Vec::new();
+
+        file.read_to_end(&mut buf)?;
+        object.write_all(&buf)?;
         object.finish(&self.location)
     }
 
 
     pub(crate) fn read_blob(&self, hexdigest: HexDigest, file_path: &path::PathBuf, buf_size: usize) -> io::Result<()> {
-        let mut object = ReadObject::new(&self.location, hexdigest)?;
+        let mut object = ObjectReader::new(&self.location, hexdigest)?;
         let mut file = fs::File::create(file_path)?;
         let mut buf = vec![0; buf_size];
         loop {
@@ -164,6 +168,7 @@ impl ObjectStore {
         }
         object.finish()
     }
+
 }
 
 

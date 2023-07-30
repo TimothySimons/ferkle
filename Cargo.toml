@@ -10,13 +10,16 @@ keywords = ["merkle", "tree"]
 categories = ["filesystem"]
 
 [dependencies]
-flate2 = "1.0.26"
+blake3 = "1.4.1"
 log = "0.4.19"
+sha1 = "0.10.5"
 sha2 = "0.10.7"
+
+[dependencies.flate2]
+version = "1.0.26"
+features = ["zlib-ng"]
+default-features = false
 
 [dependencies.uuid]
 version = "1.4.0"
-features = [
-    "v4",
-    "fast-rng",
-]
+features = ["v4","fast-rng"]

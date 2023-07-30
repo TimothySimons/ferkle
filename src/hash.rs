@@ -1,9 +1,9 @@
-use sha2::{Digest, Sha256};
+use sha1::{Digest, Sha1};
 
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Hasher {
-    inner: Sha256
+    inner: Sha1
 }
 
 #[allow(clippy::redundant_pub_crate)]
@@ -14,10 +14,10 @@ pub(crate) struct HexDigest {
 
 impl Hasher {
     pub(crate) fn new() -> Self {
-        Self { inner: Sha256::new() }
+        Self { inner: Sha1::new() }
     }
 
-    pub(crate) fn update(&mut self, buffer: &[u8]) {
+    pub(crate) fn write_all(&mut self, buffer: &[u8]) {
         self.inner.update(buffer);
     }
 

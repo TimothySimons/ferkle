@@ -15,7 +15,7 @@ mod hash;
 fn main() -> io::Result<()> {
     let path_arg = std::env::args().nth(1).unwrap();
     let path = path::PathBuf::from(path_arg);
-    let buffer_size:usize  = 8192;
+    let buffer_size:usize  = 1024 * 1024;
 
     let cwd = env::current_dir()?;
     let object_path = cwd.join("objects");
@@ -24,10 +24,12 @@ fn main() -> io::Result<()> {
 
     let metadata = fs::metadata(&path).unwrap();
     if metadata.is_dir() {
-        objstore.write_tree(&path, buffer_size).unwrap();
+        let hexdigest = objstore.write_tree(&path, buffer_size).unwrap();
+        objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
     } else if metadata.is_file() {
-        let hexdigest = objstore.write_blob(&path, buffer_size)?;
-        // objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
+        let hexdigest = objstore.write_blob_all(&path)?;
+        // let hexdigest = objstore.write_blob(&path, buffer_size)?;
+        //objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
     }
     Ok(())
 }
@@ -45,3 +47,6 @@ fn main() -> io::Result<()> {
 //         _ => None,
 //     }
 // }
+
+// TODO: commit tommorrow
+

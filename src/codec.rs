@@ -1,22 +1,22 @@
 use std::io::{self, Read, Write};
 
-use flate2::write::DeflateEncoder;
-use flate2::read::DeflateDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::read::ZlibDecoder;
 use flate2::Compression;
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Encoder<W: Write> {
-    inner: DeflateEncoder<W>,
+    inner: ZlibEncoder<W>,
 }
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Decoder<R: Read> {
-    inner: DeflateDecoder<R>,
+    inner: ZlibDecoder<R>,
 }
 
 impl<R: Read> Decoder<R> {
     pub(crate) fn new(r: R) -> Self {
-        let inner = DeflateDecoder::new(r);
+        let inner = ZlibDecoder::new(r);
         Self { inner }
     }
 
@@ -28,11 +28,11 @@ impl<R: Read> Decoder<R> {
 
 impl<W: Write> Encoder<W> {
     pub(crate) fn new(w: W) -> Self {
-        let inner = DeflateEncoder::new(w, Compression::default());
+        let inner = ZlibEncoder::new(w, Compression::fast());
         Self { inner }
     }
 
-    pub(crate) fn update(&mut self, buffer: &[u8]) -> io::Result<()> {
+    pub(crate) fn write_all(&mut self, buffer: &[u8]) -> io::Result<()> {
         self.inner.write_all(buffer)?;
         Ok(())
     }
