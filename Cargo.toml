@@ -2,7 +2,22 @@
 name = "ferkle"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/TimothySimons/ferkle"
+description = "A Merkle tree implementation of a file system"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["merkle", "tree"]
+categories = ["filesystem"]
 
 [dependencies]
+blake3 = "1.4.1"
+log = "0.4.19"
+
+[dependencies.flate2]
+version = "1.0.26"
+features = ["zlib-ng"]
+default-features = false
+
+[dependencies.uuid]
+version = "1.4.0"
+features = ["v4","fast-rng"]
