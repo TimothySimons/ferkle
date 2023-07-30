@@ -28,7 +28,7 @@ impl<R: Read> Decoder<R> {
 
 impl<W: Write> Encoder<W> {
     pub(crate) fn new(w: W) -> Self {
-        let inner = ZlibEncoder::new(w, Compression::fast());
+        let inner = ZlibEncoder::new(w, Compression::default());
         Self { inner }
     }
 

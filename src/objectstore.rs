@@ -46,7 +46,7 @@ impl ObjectWriter {
         Ok(())
     }
 
-    fn finish(self, location: &path::PathBuf) -> io::Result<HexDigest> {
+    fn finish(self, location: &path::Path) -> io::Result<HexDigest> {
         self.encoder.finish()?;
         let hexdigest = self.hasher.finish();
         let obj_hexdigest = hexdigest.to_string();
@@ -64,7 +64,7 @@ impl ObjectWriter {
 
 impl ObjectReader {
     
-    fn new(location: &path::PathBuf, hexdigest: HexDigest) -> io::Result<Self> {
+    fn new(location: &path::Path, hexdigest: HexDigest) -> io::Result<Self> {
         let obj_path = hexdigest.to_string();
         let (obj_dir_name, obj_file_name) = obj_path.split_at(OBJ_DIR_LEN);
         let obj_dir_path = location.join(obj_dir_name);
@@ -82,7 +82,7 @@ impl ObjectReader {
             let buf_slice = &buffer[..bytes_read];
             self.hasher.write_all(buf_slice);
         }
-        return Ok(bytes_read)
+        Ok(bytes_read)
     }
 
     fn finish(self) -> io::Result<()> {
@@ -143,17 +143,6 @@ impl ObjectStore {
     }
 
 
-    pub(crate) fn write_blob_all(&self, file_path: &path::PathBuf) -> io::Result<hash::HexDigest> {
-        let mut object = ObjectWriter::new()?;
-        let mut file = fs::File::open(file_path)?;
-        let mut buf = Vec::new();
-
-        file.read_to_end(&mut buf)?;
-        object.write_all(&buf)?;
-        object.finish(&self.location)
-    }
-
-
     pub(crate) fn read_blob(&self, hexdigest: HexDigest, file_path: &path::PathBuf, buf_size: usize) -> io::Result<()> {
         let mut object = ObjectReader::new(&self.location, hexdigest)?;
         let mut file = fs::File::create(file_path)?;
@@ -170,46 +159,3 @@ impl ObjectStore {
     }
 
 }
-
-
-
-// TODO: think deeply about string_lossy
-
-// TODO: read_blob could maybe be write_file, 
-// anyway contention about this one, figure it out later...
-
-// TODO: create a method to generate a temporary file
-// * we need errors for if file already exists
-// * why not use std::env::temp_dir... it makes so much more sense
-
-// TODO:
-// * create a hash::Hasher module and a Codec::encoder & Codec::decoder module wrappers 
-//   return HexDigest type, ensures size & format
-//   (agnostic to underlying algorithms)
-//   (benchmarking/testing *later* becomes much easier - when there are bench/test suites)
-// * let hasher = Hash::new(); hasher.update(...); hasher.finish(); etc.
-// * let encoder = Codec::new(); encoder.update(...); encoder.finish(); etc.
-// * See wasmer/lib/cache/src/hash.rs
-
-// TODO:
-// 1. a first draft of write_blob
-// 2. performance & validity testing framework
-// 3. refine & optimise
-// 4. clippy & perfect
-
-// TODO:
-// * flate2 is the most downloaded rust compression library
-// * flate2 supports miniz_oxide (pure rust), zlib and gzip.
-// * flate2 will allow us to test each of these underlying compression strategies
-
-// TODO: 
-// * pub(crate) fn write_tree(&self, directory: path::PathBuf) {}
-
-// TODO: 
-// * ?s are like todos themselves, need to revisit them and ensure best practice error-handling
-//   and propogation
-
-// TODO: 
-// * consider making BUFFER_SIZE a constant after some benchmarking...
-
-// TODO: We need to find a smarter way of handling OsStrings...

@@ -27,26 +27,8 @@ fn main() -> io::Result<()> {
         let hexdigest = objstore.write_tree(&path, buffer_size).unwrap();
         objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
     } else if metadata.is_file() {
-        let hexdigest = objstore.write_blob_all(&path)?;
-        // let hexdigest = objstore.write_blob(&path, buffer_size)?;
-        //objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
+        let hexdigest = objstore.write_blob(&path, buffer_size)?;
+        objstore.read_blob(hexdigest, &path.with_extension("decompressed"), buffer_size)?;
     }
     Ok(())
 }
-
-
-// fn parse_size(size_str: &str) -> Option<usize> {
-//     let value_str = size_str.trim_end();
-//     let (value, unit) = value_str.split_at(value_str.len() - 2);
-// 
-//     let parsed_value = value.parse::<usize>().ok()?;
-//     match unit {
-//         "KB" => Some(parsed_value * 1024),
-//         "MB" => Some(parsed_value * 1024 * 1024),
-//         "GB" => Some(parsed_value * 1024 * 1024 * 1024),
-//         _ => None,
-//     }
-// }
-
-// TODO: commit tommorrow
-

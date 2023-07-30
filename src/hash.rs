@@ -1,9 +1,6 @@
-use sha1::{Digest, Sha1};
-
-
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) struct Hasher {
-    inner: Sha1
+    inner: blake3::Hasher
 }
 
 #[allow(clippy::redundant_pub_crate)]
@@ -14,7 +11,7 @@ pub(crate) struct HexDigest {
 
 impl Hasher {
     pub(crate) fn new() -> Self {
-        Self { inner: Sha1::new() }
+        Self { inner: blake3::Hasher::new() }
     }
 
     pub(crate) fn write_all(&mut self, buffer: &[u8]) {
@@ -23,7 +20,7 @@ impl Hasher {
 
     pub(crate) fn finish(self) -> HexDigest {
         let digest = self.inner.finalize();
-        HexDigest{ inner: format!("{digest:x}") }
+        HexDigest{ inner: digest.to_hex().to_string() }
     }
 }
 
